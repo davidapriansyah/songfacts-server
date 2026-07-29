@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           Int         @id @default(autoincrement())
+  email        String      @unique
+  password     String?
+  profileImage String?
+  googleId     String?     @unique
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  favorites    Favorite[]
+  userRecommendation UserRecommendation?
+  ownedRooms   Room[]      @relation("RoomOwner")
+  roomMemberships RoomMember[]
+  queueItems   RoomQueue[]
+}
+
+model Song {
+  id          Int        @id @default(autoincrement())
+  youtubeId   String?
+  title       String
+  artist      String
+  album       String?
+  albumCover  String?
+  duration    Int?
+  genres      String[]
+  lyrics      String?    @db.Text
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  favorites   Favorite[]
+  songFact    SongFact?
+  songRecommendation SongRecommendation?
+  roomQueueItems RoomQueue[]
+  roomsPlayingIn  Room[]
+}
+
+model Band {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  image       String?
+  formedYear  Int?
+  genres      String[]
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Favorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  songId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song      Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, songId])
+  @@map("Favorites")
+}
+
+model SongFact {
+  id          Int      @id @default(autoincrement())
+  songId      Int      @unique
+  funFacts    Json
+  generatedAt DateTime @default(now())
+  song        Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@map("SongFacts")
+}
+
+model SongRecommendation {
+  id              Int      @id @default(autoincrement())
+  songId          Int      @unique
+  recommendations Json
+  generatedAt     DateTime @default(now())
+  song            Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@map("SongRecommendations")
+}
+
+model UserRecommendation {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique
+  songs           Json
+  source          String
+  generatedAt     DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("UserRecommendations")
+}
+
+model Room {
+  id                      String    @id @default(uuid())
+  code                    String    @unique
+  name                    String
+  leaderId                Int
+  currentSongId           Int?
+  currentSongYoutubeId    String?
+  currentSongTitle        String?
+  currentSongArtist       String?
+  currentSongThumbnail    String?
+  currentTime             Float     @default(0)
+  isPlaying               Boolean   @default(false)
+  lastActivityAt          DateTime  @default(now())
+  createdAt               DateTime  @default(now())
+  leader                  User      @relation("RoomOwner", fields: [leaderId], references: [id])
+  currentSong             Song?     @relation(fields: [currentSongId], references: [id], onDelete: SetNull)
+  members                 RoomMember[]
+  queue                   RoomQueue[]
+
+  @@map("Rooms")
+}
+
+model RoomMember {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    Int
+  role      String   @default("FOLLOWER")
+  joinedAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@map("RoomMembers")
+}
+
+model RoomQueue {
+  id              String   @id @default(uuid())
+  roomId          String
+  songId          Int?
+  youtubeVideoId  String?
+  title           String
+  artist          String?
+  thumbnail       String?
+  duration        String?
+  addedById       Int
+  position        Int
+  createdAt       DateTime @default(now())
+  room            Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  song            Song?    @relation(fields: [songId], references: [id], onDelete: SetNull)
+  addedBy         User     @relation(fields: [addedById], references: [id], onDelete: Cascade)
+
+  @@map("RoomQueues")
+}
