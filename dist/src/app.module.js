@@ -15,7 +15,6 @@ const auth_module_1 = require("./auth/auth.module");
 const songs_module_1 = require("./songs/songs.module");
 const bands_module_1 = require("./bands/bands.module");
 const favorites_module_1 = require("./favorites/favorites.module");
-const room_module_1 = require("./rooms/room.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -29,7 +28,6 @@ exports.AppModule = AppModule = __decorate([
             songs_module_1.SongsModule,
             bands_module_1.BandsModule,
             favorites_module_1.FavoritesModule,
-            room_module_1.RoomModule,
         ],
     })
 ], AppModule);
