@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import { Response } from 'express';
@@ -17,6 +18,23 @@ const UA =
 export class StreamService {
   private readonly logger = new Logger(StreamService.name);
   private readonly cache = new Map<string, { url: string; expiresAt: number }>();
+  private cookiesPath: string | null = null;
+
+  private ensureCookies(): string | null {
+    if (this.cookiesPath) return this.cookiesPath;
+    const b64 = process.env.COOKIES_BASE64;
+    if (!b64) return null;
+    try {
+      const path = '/tmp/yt_cookies.txt';
+      fs.writeFileSync(path, Buffer.from(b64, 'base64').toString('utf8'), { mode: 0o600 });
+      this.cookiesPath = path;
+      this.logger.log('YouTube cookies loaded');
+      return path;
+    } catch (error: any) {
+      this.logger.error(`Failed to load YouTube cookies: ${error?.message}`);
+      return null;
+    }
+  }
 
   async resolveStreamUrl(videoId: string): Promise<string> {
     const cached = this.cache.get(videoId);
@@ -24,10 +42,16 @@ export class StreamService {
       return cached.url;
     }
 
-    const attempts: { label: string; args: string[] }[] = [
+    const cookiesPath = this.ensureCookies();
+
+    const attempts: { label: string; args: string[] }[] = [];
+    if (cookiesPath) {
+      attempts.push({ label: 'cookies', args: ['--cookies', cookiesPath] });
+    }
+    attempts.push(
       { label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] },
       { label: 'default', args: [] },
-    ];
+    );
 
     let lastError: any = null;
     for (const attempt of attempts) {

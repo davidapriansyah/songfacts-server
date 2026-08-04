@@ -11,6 +11,7 @@ exports.StreamService = void 0;
 const common_1 = require("@nestjs/common");
 const child_process_1 = require("child_process");
 const util_1 = require("util");
+const fs = require("fs");
 const http = require("http");
 const https = require("https");
 const execFileAsync = (0, util_1.promisify)(child_process_1.execFile);
@@ -22,16 +23,37 @@ let StreamService = StreamService_1 = class StreamService {
     constructor() {
         this.logger = new common_1.Logger(StreamService_1.name);
         this.cache = new Map();
+        this.cookiesPath = null;
+    }
+    ensureCookies() {
+        if (this.cookiesPath)
+            return this.cookiesPath;
+        const b64 = process.env.COOKIES_BASE64;
+        if (!b64)
+            return null;
+        try {
+            const path = '/tmp/yt_cookies.txt';
+            fs.writeFileSync(path, Buffer.from(b64, 'base64').toString('utf8'), { mode: 0o600 });
+            this.cookiesPath = path;
+            this.logger.log('YouTube cookies loaded');
+            return path;
+        }
+        catch (error) {
+            this.logger.error(`Failed to load YouTube cookies: ${error?.message}`);
+            return null;
+        }
     }
     async resolveStreamUrl(videoId) {
         const cached = this.cache.get(videoId);
         if (cached && cached.expiresAt > Date.now()) {
             return cached.url;
         }
-        const attempts = [
-            { label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] },
-            { label: 'default', args: [] },
-        ];
+        const cookiesPath = this.ensureCookies();
+        const attempts = [];
+        if (cookiesPath) {
+            attempts.push({ label: 'cookies', args: ['--cookies', cookiesPath] });
+        }
+        attempts.push({ label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] }, { label: 'default', args: [] });
         let lastError = null;
         for (const attempt of attempts) {
             try {
