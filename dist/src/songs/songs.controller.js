@@ -16,10 +16,17 @@ exports.SongsController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const songs_service_1 = require("./songs.service");
+const stream_service_1 = require("./stream.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 let SongsController = class SongsController {
-    constructor(songsService) {
+    constructor(songsService, streamService) {
         this.songsService = songsService;
+        this.streamService = streamService;
+    }
+    async stream(query, range, res) {
+        if (!res)
+            throw new common_1.BadRequestException('No response');
+        return this.streamService.stream(String(query.videoId || ''), range, res);
     }
     async findAll(page, limit) {
         return this.songsService.findAll(page || 1, limit || 20);
@@ -75,6 +82,18 @@ let SongsController = class SongsController {
     }
 };
 exports.SongsController = SongsController;
+__decorate([
+    (0, common_1.Get)('stream'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Stream audio for a YouTube video (proxied from YouTube)' }),
+    __param(0, (0, common_1.Query)()),
+    __param(1, (0, common_1.Headers)('range')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], SongsController.prototype, "stream", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
@@ -261,6 +280,7 @@ __decorate([
 exports.SongsController = SongsController = __decorate([
     (0, swagger_1.ApiTags)('songs'),
     (0, common_1.Controller)('songs'),
-    __metadata("design:paramtypes", [songs_service_1.SongsService])
+    __metadata("design:paramtypes", [songs_service_1.SongsService,
+        stream_service_1.StreamService])
 ], SongsController);
 //# sourceMappingURL=songs.controller.js.map

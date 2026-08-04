@@ -1,7 +1,11 @@
+import { Response } from 'express';
 import { SongsService } from './songs.service';
+import { StreamService } from './stream.service';
 export declare class SongsController {
     private readonly songsService;
-    constructor(songsService: SongsService);
+    private readonly streamService;
+    constructor(songsService: SongsService, streamService: StreamService);
+    stream(query: any, range?: string, res?: Response): Promise<void>;
     findAll(page?: number, limit?: number): Promise<{
         data: {
             id: number;

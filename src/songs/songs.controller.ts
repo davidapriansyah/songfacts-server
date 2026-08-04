@@ -1,12 +1,30 @@
-import { Controller, Get, Post, Put, Param, Query, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Query, Body, UseGuards, Req, Headers, Res, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Response } from 'express';
 import { SongsService } from './songs.service';
+import { StreamService } from './stream.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('songs')
 @Controller('songs')
 export class SongsController {
-  constructor(private readonly songsService: SongsService) {}
+  constructor(
+    private readonly songsService: SongsService,
+    private readonly streamService: StreamService,
+  ) {}
+
+  @Get('stream')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Stream audio for a YouTube video (proxied from YouTube)' })
+  async stream(
+    @Query() query: any,
+    @Headers('range') range?: string,
+    @Res() res?: Response,
+  ) {
+    if (!res) throw new BadRequestException('No response');
+    return this.streamService.stream(String(query.videoId || ''), range, res);
+  }
 
   @Get()
   @UseGuards(JwtAuthGuard)

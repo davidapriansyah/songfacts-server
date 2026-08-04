@@ -16,7 +16,10 @@ RUN npm run build
 
 FROM node:20-slim AS runner
 
-RUN apt-get update -qq && apt-get install -y -qq openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && apt-get install -y -qq openssl ca-certificates curl python3 \
+  && curl -L --fail https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+  && chmod +x /usr/local/bin/yt-dlp \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

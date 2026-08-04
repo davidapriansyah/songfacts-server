@@ -13,14 +13,15 @@ const songs_service_1 = require("./songs.service");
 const youtube_service_1 = require("./youtube.service");
 const lyrics_service_1 = require("./lyrics.service");
 const gemini_service_1 = require("./gemini.service");
+const stream_service_1 = require("./stream.service");
 let SongsModule = class SongsModule {
 };
 exports.SongsModule = SongsModule;
 exports.SongsModule = SongsModule = __decorate([
     (0, common_1.Module)({
         controllers: [songs_controller_1.SongsController],
-        providers: [songs_service_1.SongsService, youtube_service_1.YoutubeService, lyrics_service_1.LyricsService, gemini_service_1.GeminiService],
-        exports: [songs_service_1.SongsService, youtube_service_1.YoutubeService, lyrics_service_1.LyricsService, gemini_service_1.GeminiService],
+        providers: [songs_service_1.SongsService, youtube_service_1.YoutubeService, lyrics_service_1.LyricsService, gemini_service_1.GeminiService, stream_service_1.StreamService],
+        exports: [songs_service_1.SongsService, youtube_service_1.YoutubeService, lyrics_service_1.LyricsService, gemini_service_1.GeminiService, stream_service_1.StreamService],
     })
 ], SongsModule);
 //# sourceMappingURL=songs.module.js.map
