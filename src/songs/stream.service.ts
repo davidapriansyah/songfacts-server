@@ -131,17 +131,23 @@ export class StreamService {
       '--no-warnings',
       '--no-cache-dir',
       '-4',
+      '--extractor-args',
+      'youtube:player_client=web_embedded',
     ];
     if (cookiesPath) args.push('--cookies', cookiesPath);
 
     try {
-      const { stdout } = await execFileAsync('yt-dlp', args, {
-        timeout: 25000,
-        maxBuffer: 30 * 1024 * 1024,
-      });
+      const [{ stdout: versionOut }, { stdout }] = await Promise.all([
+        execFileAsync('yt-dlp', ['--version'], { timeout: 5000 }),
+        execFileAsync('yt-dlp', args, {
+          timeout: 25000,
+          maxBuffer: 30 * 1024 * 1024,
+        }),
+      ]);
       const j = JSON.parse(stdout);
       const formats = Array.isArray(j.formats) ? j.formats : [];
       res.json({
+        ytDlpVersion: String(versionOut).trim(),
         title: j.title,
         playabilityStatus: j.playabilityStatus || null,
         formatCount: formats.length,
