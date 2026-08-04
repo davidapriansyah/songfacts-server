@@ -59,7 +59,7 @@ export class StreamService {
         const { stdout } = await execFileAsync('yt-dlp', [
           `https://www.youtube.com/watch?v=${videoId}`,
           '-f',
-          'bestaudio[ext=m4a][protocol^=http]/bestaudio[protocol^=http]/bestaudio',
+          'bestaudio[protocol^=http]/bestaudio',
           '-g',
           '--no-playlist',
           '--no-warnings',
@@ -71,6 +71,9 @@ export class StreamService {
         const url = stdout.trim();
         if (!url || !/^https?:\/\//.test(url)) {
           throw new Error('No playable audio URL returned');
+        }
+        if (/\.m3u8?(\?|$)/i.test(url)) {
+          throw new Error('HLS manifest returned');
         }
 
         this.cache.set(videoId, { url, expiresAt: Date.now() + CACHE_TTL_MS });
