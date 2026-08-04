@@ -47,8 +47,9 @@ let StreamService = StreamService_1 = class StreamService {
             return url;
         }
         catch (error) {
-            this.logger.error(`yt-dlp failed for ${videoId}: ${error?.stderr || error?.message}`);
-            throw new common_1.InternalServerErrorException('Failed to resolve audio stream');
+            const detail = String(error?.stderr || error?.message || error).slice(0, 300);
+            this.logger.error(`yt-dlp failed for ${videoId}: ${detail}`);
+            throw new common_1.InternalServerErrorException(`yt-dlp failed: ${detail}`);
         }
     }
     fetchWithRedirects(url, headers, redirectsLeft = MAX_REDIRECTS) {

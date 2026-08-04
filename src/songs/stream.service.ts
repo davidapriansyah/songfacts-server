@@ -44,8 +44,9 @@ export class StreamService {
       this.cache.set(videoId, { url, expiresAt: Date.now() + CACHE_TTL_MS });
       return url;
     } catch (error: any) {
-      this.logger.error(`yt-dlp failed for ${videoId}: ${error?.stderr || error?.message}`);
-      throw new InternalServerErrorException('Failed to resolve audio stream');
+      const detail = String(error?.stderr || error?.message || error).slice(0, 300);
+      this.logger.error(`yt-dlp failed for ${videoId}: ${detail}`);
+      throw new InternalServerErrorException(`yt-dlp failed: ${detail}`);
     }
   }
 
