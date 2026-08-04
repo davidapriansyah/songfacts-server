@@ -6,5 +6,6 @@ export declare class StreamService {
     private ensureCookies;
     resolveStreamUrl(videoId: string): Promise<string>;
     private fetchWithRedirects;
-    stream(videoId: string, range: string | undefined, res: Response): void;
+    debugFormats(videoId: string, res: Response): Promise<void>;
+    stream(videoId: string, range: string | undefined, res: Response, debug?: boolean): Promise<void> | undefined;
 }

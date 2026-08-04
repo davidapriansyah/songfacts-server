@@ -26,7 +26,7 @@ let SongsController = class SongsController {
     async stream(query, range, res) {
         if (!res)
             throw new common_1.BadRequestException('No response');
-        return this.streamService.stream(String(query.videoId || ''), range, res);
+        return this.streamService.stream(String(query.videoId || ''), range, res, !!query.debug);
     }
     async findAll(page, limit) {
         return this.songsService.findAll(page || 1, limit || 20);

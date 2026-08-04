@@ -106,9 +106,52 @@ let StreamService = StreamService_1 = class StreamService {
             req.on('error', reject);
         });
     }
-    stream(videoId, range, res) {
+    async debugFormats(videoId, res) {
+        const cookiesPath = this.ensureCookies();
+        const args = [
+            `https://www.youtube.com/watch?v=${videoId}`,
+            '-J',
+            '--skip-download',
+            '--no-playlist',
+            '--no-warnings',
+            '--no-cache-dir',
+            '-4',
+        ];
+        if (cookiesPath)
+            args.push('--cookies', cookiesPath);
+        try {
+            const { stdout } = await execFileAsync('yt-dlp', args, {
+                timeout: 25000,
+                maxBuffer: 30 * 1024 * 1024,
+            });
+            const j = JSON.parse(stdout);
+            const formats = Array.isArray(j.formats) ? j.formats : [];
+            res.json({
+                title: j.title,
+                playabilityStatus: j.playabilityStatus || null,
+                formatCount: formats.length,
+                formats: formats.slice(0, 20).map((f) => ({
+                    format_id: f.format_id,
+                    ext: f.ext,
+                    acodec: f.acodec,
+                    vcodec: f.vcodec,
+                    protocol: f.protocol,
+                    has_url: !!f.url,
+                })),
+            });
+        }
+        catch (error) {
+            const detail = String(error?.stderr || error?.message || error).slice(0, 1200);
+            this.logger.error(`yt-dlp debug failed for ${videoId}: ${detail}`);
+            res.status(500).json({ error: detail });
+        }
+    }
+    stream(videoId, range, res, debug) {
         if (!VIDEO_ID_REGEX.test(videoId || '')) {
             throw new common_1.BadRequestException('Invalid videoId');
+        }
+        if (debug) {
+            return this.debugFormats(videoId, res);
         }
         this.resolveStreamUrl(videoId)
             .then(async (directUrl) => {
