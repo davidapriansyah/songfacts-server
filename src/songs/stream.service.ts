@@ -46,6 +46,10 @@ export class StreamService {
 
     const attempts: { label: string; args: string[] }[] = [];
     if (cookiesPath) {
+      attempts.push({
+        label: 'cookies_web_embedded',
+        args: ['--cookies', cookiesPath, '--extractor-args', 'youtube:player_client=web_embedded'],
+      });
       attempts.push({ label: 'cookies', args: ['--cookies', cookiesPath] });
     }
     attempts.push(

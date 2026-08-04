@@ -51,6 +51,10 @@ let StreamService = StreamService_1 = class StreamService {
         const cookiesPath = this.ensureCookies();
         const attempts = [];
         if (cookiesPath) {
+            attempts.push({
+                label: 'cookies_web_embedded',
+                args: ['--cookies', cookiesPath, '--extractor-args', 'youtube:player_client=web_embedded'],
+            });
             attempts.push({ label: 'cookies', args: ['--cookies', cookiesPath] });
         }
         attempts.push({ label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] }, { label: 'default', args: [] });
