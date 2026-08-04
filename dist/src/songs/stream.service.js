@@ -28,29 +28,39 @@ let StreamService = StreamService_1 = class StreamService {
         if (cached && cached.expiresAt > Date.now()) {
             return cached.url;
         }
-        try {
-            const { stdout } = await execFileAsync('yt-dlp', [
-                `https://www.youtube.com/watch?v=${videoId}`,
-                '-f',
-                'bestaudio[ext=m4a][protocol^=http]/bestaudio[protocol^=http]/bestaudio',
-                '-g',
-                '--no-playlist',
-                '--no-warnings',
-                '--no-cache-dir',
-                '-4',
-            ], { timeout: 60000, maxBuffer: 10 * 1024 * 1024 });
-            const url = stdout.trim();
-            if (!url || !/^https?:\/\//.test(url)) {
-                throw new Error('No playable audio URL returned');
+        const attempts = [
+            { label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] },
+            { label: 'default', args: [] },
+        ];
+        let lastError = null;
+        for (const attempt of attempts) {
+            try {
+                const { stdout } = await execFileAsync('yt-dlp', [
+                    `https://www.youtube.com/watch?v=${videoId}`,
+                    '-f',
+                    'bestaudio[ext=m4a][protocol^=http]/bestaudio[protocol^=http]/bestaudio',
+                    '-g',
+                    '--no-playlist',
+                    '--no-warnings',
+                    '--no-cache-dir',
+                    '-4',
+                    ...attempt.args,
+                ], { timeout: 20000, maxBuffer: 10 * 1024 * 1024 });
+                const url = stdout.trim();
+                if (!url || !/^https?:\/\//.test(url)) {
+                    throw new Error('No playable audio URL returned');
+                }
+                this.cache.set(videoId, { url, expiresAt: Date.now() + CACHE_TTL_MS });
+                return url;
             }
-            this.cache.set(videoId, { url, expiresAt: Date.now() + CACHE_TTL_MS });
-            return url;
+            catch (error) {
+                lastError = error;
+                this.logger.warn(`yt-dlp [${attempt.label}] failed for ${videoId}: ${String(error?.stderr || error?.message || error).slice(0, 300)}`);
+            }
         }
-        catch (error) {
-            const detail = String(error?.stderr || error?.message || error).slice(0, 300);
-            this.logger.error(`yt-dlp failed for ${videoId}: ${detail}`);
-            throw new common_1.InternalServerErrorException(`yt-dlp failed: ${detail}`);
-        }
+        const detail = String(lastError?.stderr || lastError?.message || lastError).slice(0, 300);
+        this.logger.error(`yt-dlp failed for ${videoId}: ${detail}`);
+        throw new common_1.InternalServerErrorException(`yt-dlp failed: ${detail}`);
     }
     fetchWithRedirects(url, headers, redirectsLeft = MAX_REDIRECTS) {
         return new Promise((resolve, reject) => {
