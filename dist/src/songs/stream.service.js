@@ -87,7 +87,10 @@ let StreamService = StreamService_1 = class StreamService {
         }
         this.resolveStreamUrl(videoId)
             .then(async (directUrl) => {
-            const headers = { 'User-Agent': UA };
+            const headers = {
+                'User-Agent': UA,
+                'Referer': 'https://www.youtube.com/',
+            };
             if (range)
                 headers.Range = range;
             const upstream = await this.fetchWithRedirects(directUrl, headers);
