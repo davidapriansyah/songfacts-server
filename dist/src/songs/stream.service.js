@@ -125,18 +125,21 @@ let StreamService = StreamService_1 = class StreamService {
         ];
         if (cookiesPath)
             args.push('--cookies', cookiesPath);
+        let version = 'unknown';
         try {
-            const [{ stdout: versionOut }, { stdout }] = await Promise.all([
-                execFileAsync('yt-dlp', ['--version'], { timeout: 5000 }),
-                execFileAsync('yt-dlp', args, {
-                    timeout: 25000,
-                    maxBuffer: 30 * 1024 * 1024,
-                }),
-            ]);
+            const { stdout: versionOut } = await execFileAsync('yt-dlp', ['--version'], { timeout: 5000 });
+            version = String(versionOut).trim();
+        }
+        catch { }
+        try {
+            const { stdout } = await execFileAsync('yt-dlp', args, {
+                timeout: 25000,
+                maxBuffer: 30 * 1024 * 1024,
+            });
             const j = JSON.parse(stdout);
             const formats = Array.isArray(j.formats) ? j.formats : [];
             res.json({
-                ytDlpVersion: String(versionOut).trim(),
+                ytDlpVersion: version,
                 title: j.title,
                 playabilityStatus: j.playabilityStatus || null,
                 formatCount: formats.length,
@@ -153,7 +156,7 @@ let StreamService = StreamService_1 = class StreamService {
         catch (error) {
             const detail = String(error?.stderr || error?.message || error).slice(0, 1200);
             this.logger.error(`yt-dlp debug failed for ${videoId}: ${detail}`);
-            res.status(500).json({ error: detail });
+            res.status(500).json({ ytDlpVersion: version, error: detail });
         }
     }
     stream(videoId, range, res, debug) {
