@@ -23,7 +23,13 @@ export class SongsController {
     @Res() res?: Response,
   ) {
     if (!res) throw new BadRequestException('No response');
-    return this.streamService.stream(String(query.videoId || ''), range, res, !!query.debug);
+    return this.streamService.stream(
+      String(query.videoId || ''),
+      range,
+      res,
+      !!query.debug,
+      query.client ? String(query.client) : undefined,
+    );
   }
 
   @Get()
