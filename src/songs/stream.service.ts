@@ -59,14 +59,18 @@ export class StreamService {
     const attempts: { label: string; args: string[] }[] = [];
     if (cookiesPath) {
       attempts.push({
-        label: 'cookies_web_embedded',
+        label: 'tv_embedded',
+        args: ['--cookies', cookiesPath, '--extractor-args', 'youtube:player_client=tv_embedded'],
+      });
+      attempts.push({ label: 'default', args: ['--cookies', cookiesPath] });
+      attempts.push({
+        label: 'web_embedded',
         args: ['--cookies', cookiesPath, '--extractor-args', 'youtube:player_client=web_embedded'],
       });
-      attempts.push({ label: 'cookies', args: ['--cookies', cookiesPath] });
     }
     attempts.push(
-      { label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] },
-      { label: 'default', args: [] },
+      { label: 'tv_embedded_nocookies', args: ['--extractor-args', 'youtube:player_client=tv_embedded'] },
+      { label: 'default_nocookies', args: [] },
     );
 
     let lastError: any = null;
@@ -75,7 +79,7 @@ export class StreamService {
         const { stdout } = await execFileAsync('yt-dlp', [
           `https://www.youtube.com/watch?v=${videoId}`,
           '-f',
-          'bestaudio[protocol^=http]/bestaudio',
+          'bestaudio[ext=m4a]/bestaudio[protocol^=http]/bestaudio',
           '-g',
           '--no-playlist',
           '--no-warnings',
