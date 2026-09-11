@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createClient } from 'redis';
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
@@ -12,11 +13,26 @@ export class RedisService implements OnModuleDestroy {
 
   private async connect() {
     try {
-      // Simple in-memory cache fallback if Redis is not available
-      this.logger.log('Redis: Using in-memory cache fallback');
-      this.client = new Map();
-    } catch (error) {
-      this.logger.warn('Redis connection failed, using in-memory cache');
+      const url = this.configService.get<string>('REDIS_URL', '');
+      if (!url) throw new Error('REDIS_URL not set');
+
+      const client = createClient({
+        url,
+        socket: {
+          connectTimeout: 2000,
+          reconnectStrategy: false,
+        },
+      });
+      client.on('error', (err: Error) => {
+        this.logger.warn(`Redis error: ${err.message}`);
+      });
+
+      await client.connect();
+      this.client = client;
+      this.logger.log('Redis connected');
+    } catch (error: any) {
+      // Redis not reachable — fall back to an in-memory cache (resets on restart)
+      this.logger.warn(`Redis connection failed (${error?.message}), using in-memory cache`);
       this.client = new Map();
     }
   }
@@ -31,6 +47,7 @@ export class RedisService implements OnModuleDestroy {
         this.client.delete(key);
         return null;
       }
+      if (!this.client) return null;
       return await this.client.get(key);
     } catch (error) {
       this.logger.error('Redis GET error:', error);
@@ -45,8 +62,9 @@ export class RedisService implements OnModuleDestroy {
         this.client.set(key, { value, expiry });
         return;
       }
+      if (!this.client) return;
       if (ttlSeconds) {
-        await this.client.setex(key, ttlSeconds, value);
+        await this.client.setEx(key, ttlSeconds, value);
       } else {
         await this.client.set(key, value);
       }
@@ -61,6 +79,7 @@ export class RedisService implements OnModuleDestroy {
         this.client.delete(key);
         return;
       }
+      if (!this.client) return;
       await this.client.del(key);
     } catch (error) {
       this.logger.error('Redis DEL error:', error);
@@ -87,7 +106,8 @@ export class RedisService implements OnModuleDestroy {
         this.client.clear();
         return;
       }
-      await this.client.flushall();
+      if (!this.client) return;
+      await this.client.flushAll();
     } catch (error) {
       this.logger.error('Redis FLUSHALL error:', error);
     }

@@ -1,14 +1,16 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { YoutubeService } from './youtube.service';
 import { LyricsService } from './lyrics.service';
 import { GeminiService } from './gemini.service';
 export declare class SongsService {
     private prisma;
+    private redisService;
     private youtube;
     private lyrics;
     private gemini;
     private readonly logger;
-    constructor(prisma: PrismaService, youtube: YoutubeService, lyrics: LyricsService, gemini: GeminiService);
+    constructor(prisma: PrismaService, redisService: RedisService, youtube: YoutubeService, lyrics: LyricsService, gemini: GeminiService);
     findAll(page?: number, limit?: number): Promise<{
         data: {
             id: number;
@@ -200,7 +202,13 @@ export declare class SongsService {
         genres: string[];
         lyrics: string | null;
     }[]>;
-    getGenreFromYoutube(genre: string, limit?: number): Promise<any[]>;
+    getGenreFromYoutube(genre: string, limit?: number): Promise<any>;
+    private searchGenreSongs;
+    /**
+     * Fallback search using yt-dlp (web scraping). No YouTube API key / quota needed.
+     */
+    private searchGenreSongsWithYtDlp;
+    private toGenreSong;
     getAiRecommendations(userId?: number): Promise<{
         source: string;
         songs: any[];

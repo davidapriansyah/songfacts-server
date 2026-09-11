@@ -1,9 +1,39 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { YoutubeService } from './youtube.service';
 import { LyricsService } from './lyrics.service';
 import { GeminiService } from './gemini.service';
 import axios from 'axios';
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * How long genre recommendation results are considered fresh before we hit
+ * the YouTube API again. Keeps YouTube quota usage low.
+ */
+const GENRE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+const GENRE_SEARCH_MAP: Record<string, string> = {
+  'Emo Barat': 'emo rock music official audio',
+  'Emo Indo': 'music indonesia emo',
+  'Pop Punk Indo': 'pop punk indonesia music',
+  'Pop Punk Barat': 'pop punk music official audio',
+  'Alternative Rock': 'alternative rock music official audio',
+  'Indonesian Pop 2000s': 'lagu indonesia pop 2000an',
+  'Barat Pop 2000s': 'pop music 2000s official audio',
+  'Dangdut': 'dangdut music official audio',
+  'Reggae Indonesia': 'reggae indonesia music',
+  'Reggae Barat': 'reggae music official audio',
+};
+
+const GENRE_BLACKLIST = [
+  'kumpulan', 'compilation', 'collection', 'full album',
+  'lagu', 'tembang', 'terlengkap', 'terbaru',
+  'mix', 'medley', 'mega', 'terbaik', 'playlist',
+];
 
 @Injectable()
 export class SongsService {
@@ -11,6 +41,7 @@ export class SongsService {
 
   constructor(
     private prisma: PrismaService,
+    private redisService: RedisService,
     private youtube: YoutubeService,
     private lyrics: LyricsService,
     private gemini: GeminiService,
@@ -412,52 +443,124 @@ export class SongsService {
   }
 
   async getGenreFromYoutube(genre: string, limit = 20) {
-    // Build search query based on genre
-    const genreSearchMap: Record<string, string> = {
-      'Emo Barat': 'emo rock music official audio',
-      'Emo Indo': 'music indonesia emo',
-      'Pop Punk Indo': 'pop punk indonesia music',
-      'Pop Punk Barat': 'pop punk music official audio',
-      'Alternative Rock': 'alternative rock music official audio',
-      'Indonesian Pop 2000s': 'lagu indonesia pop 2000an',
-      'Barat Pop 2000s': 'pop music 2000s official audio',
-      'Dangdut': 'dangdut music official audio',
-      'Reggae Indonesia': 'reggae indonesia music',
-      'Reggae Barat': 'reggae music official audio',
-    };
+    const cacheKey = `genre:songs:${genre.toLowerCase()}`;
+    const cached = await this.redisService.getJSON<{ cachedAt: number; songs: any[] }>(cacheKey);
 
-    const searchQuery = genreSearchMap[genre] || `${genre} music official audio`;
+    // Serve fresh cache first — avoids burning YouTube API quota on every page open
+    const isFresh =
+      cached &&
+      Array.isArray(cached.songs) &&
+      cached.songs.length > 0 &&
+      Date.now() - cached.cachedAt < GENRE_CACHE_TTL_MS;
+    if (isFresh) {
+      return (cached as any).songs.slice(0, limit);
+    }
+
+    // No fresh data — fetch from YouTube. Prefer the official API when it works,
+    // fall back to yt-dlp search (no API key / quota) so genre pages always fill.
+    let fresh = await this.searchGenreSongs(genre, limit);
+    if (fresh.length === 0) {
+      this.logger.warn(`Genre "${genre}" — YouTube Data API returned 0 results, falling back to yt-dlp`);
+      fresh = await this.searchGenreSongsWithYtDlp(genre, limit);
+    } else {
+      this.logger.log(`Genre "${genre}" served from YouTube Data API (${fresh.length} songs)`);
+    }
+
+    if (fresh.length > 0) {
+      await this.redisService.setJSON(cacheKey, {
+        cachedAt: Date.now(),
+        songs: fresh,
+      });
+      return fresh.slice(0, limit);
+    }
+
+    // YouTube unavailable (invalid key / quota / network) — fall back to stale cache
+    if (cached && Array.isArray(cached.songs) && cached.songs.length > 0) {
+      this.logger.warn(`Genre "${genre}" served stale cached songs (YouTube unavailable)`);
+      return cached.songs.slice(0, limit);
+    }
+
+    return [];
+  }
+
+  private async searchGenreSongs(genre: string, limit = 20): Promise<any[]> {
+    const searchQuery = GENRE_SEARCH_MAP[genre] || `${genre} music official audio`;
     const items = await this.youtube.searchVideos(searchQuery, limit);
 
     const results: any[] = [];
-    const blacklisted = [
-      'kumpulan', 'compilation', 'collection', 'full album',
-      'lagu', 'tembang', 'terlengkap', 'terbaru',
-      'mix', 'medley', 'mega', 'terbaik', 'playlist',
-    ];
-
     for (const item of items) {
       const videoId = item.id.videoId;
       const title = (item.snippet?.title || '').toLowerCase();
-      if (blacklisted.some((w) => title.includes(w))) continue;
+      if (GENRE_BLACKLIST.some((w) => title.includes(w))) continue;
 
       const parsed = this.parseVideoTitle(item.snippet.title);
-
       const existingSong = await this.prisma.song.findFirst({
         where: { youtubeId: videoId },
       });
 
-      results.push({
-        ...(existingSong || {}),
-        videoId,
-        title: existingSong?.title || parsed.title,
-        artist: existingSong?.artist || parsed.artist,
-        albumCover: existingSong?.albumCover || item.snippet.thumbnails?.high?.url,
-        inDb: !!existingSong,
-      });
+      results.push(await this.toGenreSong(existingSong, videoId, parsed.title, parsed.artist, item.snippet?.thumbnails?.high?.url));
     }
 
     return results;
+  }
+
+  /**
+   * Fallback search using yt-dlp (web scraping). No YouTube API key / quota needed.
+   */
+  private async searchGenreSongsWithYtDlp(genre: string, limit = 20): Promise<any[]> {
+    const searchQuery = GENRE_SEARCH_MAP[genre] || `${genre} music official audio`;
+    const searchLimit = Math.min(Math.max(limit, 15), 30);
+
+    try {
+      const { stdout } = await execFileAsync('yt-dlp', [
+        `ytsearch${searchLimit}:${searchQuery}`,
+        '--flat-playlist',
+        '-J',
+        '--no-warnings',
+        '--no-cache-dir',
+        '-4',
+      ], { timeout: 40000, maxBuffer: 20 * 1024 * 1024 });
+
+      const data = JSON.parse(stdout);
+      const entries: any[] = Array.isArray(data.entries) ? data.entries : [];
+
+      const results: any[] = [];
+      for (const entry of entries) {
+        const videoId = entry?.id;
+        const rawTitle = entry?.title || '';
+        if (!videoId || !rawTitle) continue;
+        if (GENRE_BLACKLIST.some((w) => rawTitle.toLowerCase().includes(w))) continue;
+        if (entry.live_status === 'is_live' || entry.is_live) continue;
+
+        const parsed = this.parseVideoTitle(rawTitle);
+        const existingSong = await this.prisma.song.findFirst({
+          where: { youtubeId: videoId },
+        });
+        const thumbnail = entry.thumbnails?.[0]?.url || (existingSong?.albumCover as string) ||
+          `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+        results.push(await this.toGenreSong(existingSong, videoId, parsed.title, parsed.artist, thumbnail));
+      }
+
+      if (results.length === 0) {
+        this.logger.warn(`yt-dlp genre search returned nothing for "${genre}"`);
+      }
+      return results;
+    } catch (error: any) {
+      this.logger.warn(`yt-dlp genre search failed for "${genre}": ${error?.message || error}`);
+      return [];
+    }
+  }
+
+  private async toGenreSong(existingSong: any, videoId: string, title: string, artist: string, thumbnail?: string): Promise<any> {
+    return {
+      ...(existingSong || {}),
+      videoId,
+      title: existingSong?.title || title,
+      artist: existingSong?.artist || artist,
+      albumCover: existingSong?.albumCover || thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      inDb: !!existingSong,
+    };
   }
 
   async getAiRecommendations(userId?: number) {

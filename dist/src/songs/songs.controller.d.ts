@@ -5,7 +5,10 @@ export declare class SongsController {
     private readonly songsService;
     private readonly streamService;
     constructor(songsService: SongsService, streamService: StreamService);
-    stream(query: any, range?: string, res?: Response): Promise<void | undefined>;
+    stream(query: any, range?: string, res?: Response): Promise<void>;
+    getStreamUrl(videoId: string): Promise<{
+        url: string;
+    }>;
     findAll(page?: number, limit?: number): Promise<{
         data: {
             id: number;
@@ -86,7 +89,7 @@ export declare class SongsController {
         genres: string[];
         lyrics: string | null;
     }[]>;
-    getGenreFromYoutube(genre: string, limit?: number): Promise<any[]>;
+    getGenreFromYoutube(genre: string, limit?: number): Promise<any>;
     getAiRecommendations(req: any): Promise<{
         source: string;
         songs: any[];

@@ -13,6 +13,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RedisService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const redis_1 = require("redis");
 let RedisService = RedisService_1 = class RedisService {
     constructor(configService) {
         this.configService = configService;
@@ -22,12 +23,26 @@ let RedisService = RedisService_1 = class RedisService {
     }
     async connect() {
         try {
-            // Simple in-memory cache fallback if Redis is not available
-            this.logger.log('Redis: Using in-memory cache fallback');
-            this.client = new Map();
+            const url = this.configService.get('REDIS_URL', '');
+            if (!url)
+                throw new Error('REDIS_URL not set');
+            const client = (0, redis_1.createClient)({
+                url,
+                socket: {
+                    connectTimeout: 2000,
+                    reconnectStrategy: false,
+                },
+            });
+            client.on('error', (err) => {
+                this.logger.warn(`Redis error: ${err.message}`);
+            });
+            await client.connect();
+            this.client = client;
+            this.logger.log('Redis connected');
         }
         catch (error) {
-            this.logger.warn('Redis connection failed, using in-memory cache');
+            // Redis not reachable — fall back to an in-memory cache (resets on restart)
+            this.logger.warn(`Redis connection failed (${error?.message}), using in-memory cache`);
             this.client = new Map();
         }
     }
@@ -41,6 +56,8 @@ let RedisService = RedisService_1 = class RedisService {
                 this.client.delete(key);
                 return null;
             }
+            if (!this.client)
+                return null;
             return await this.client.get(key);
         }
         catch (error) {
@@ -55,8 +72,10 @@ let RedisService = RedisService_1 = class RedisService {
                 this.client.set(key, { value, expiry });
                 return;
             }
+            if (!this.client)
+                return;
             if (ttlSeconds) {
-                await this.client.setex(key, ttlSeconds, value);
+                await this.client.setEx(key, ttlSeconds, value);
             }
             else {
                 await this.client.set(key, value);
@@ -72,6 +91,8 @@ let RedisService = RedisService_1 = class RedisService {
                 this.client.delete(key);
                 return;
             }
+            if (!this.client)
+                return;
             await this.client.del(key);
         }
         catch (error) {
@@ -98,7 +119,9 @@ let RedisService = RedisService_1 = class RedisService {
                 this.client.clear();
                 return;
             }
-            await this.client.flushall();
+            if (!this.client)
+                return;
+            await this.client.flushAll();
         }
         catch (error) {
             this.logger.error('Redis FLUSHALL error:', error);

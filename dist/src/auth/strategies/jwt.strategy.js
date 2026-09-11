@@ -17,7 +17,14 @@ const config_1 = require("@nestjs/config");
 let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy) {
     constructor(configService) {
         super({
-            jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
+            jwtFromRequest: (request) => {
+                // 1. Bearer token in Authorization header (normal API calls)
+                const header = passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken()(request);
+                if (header)
+                    return header;
+                // 2. token query param (for <audio> elements that can't set headers)
+                return passport_jwt_1.ExtractJwt.fromUrlQueryParameter('token')(request);
+            },
             ignoreExpiration: false,
             secretOrKey: configService.get('JWT_SECRET'),
         });

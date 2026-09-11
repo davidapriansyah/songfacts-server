@@ -26,7 +26,11 @@ let SongsController = class SongsController {
     async stream(query, range, res) {
         if (!res)
             throw new common_1.BadRequestException('No response');
-        return this.streamService.stream(String(query.videoId || ''), range, res, !!query.debug);
+        return this.streamService.stream(String(query.videoId || ''), range, res, !!query.debug, query.client ? String(query.client) : undefined);
+    }
+    async getStreamUrl(videoId) {
+        const url = await this.streamService.resolveStreamUrl(String(videoId || ''));
+        return { url };
     }
     async findAll(page, limit) {
         return this.songsService.findAll(page || 1, limit || 20);
@@ -94,6 +98,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], SongsController.prototype, "stream", null);
+__decorate([
+    (0, common_1.Get)('stream-url'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Resolve direct stream URL for a YouTube video (cached 30 min)' }),
+    __param(0, (0, common_1.Query)('videoId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], SongsController.prototype, "getStreamUrl", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
