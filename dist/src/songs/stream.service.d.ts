@@ -26,6 +26,12 @@ export declare class StreamService {
     private reStreamDirect;
     private fetchWithRedirects;
     /**
+     * Resolve a direct URL for native mobile players (AVPlayer/ExoPlayer), which
+     * can decode YouTube DASH fMP4 that Chrome's <audio> rejects. Returns '' if
+     * resolution fails so the mobile client can fall back to the remuxed proxy.
+     */
+    resolveMobileUrl(videoId: string): Promise<string>;
+    /**
      * Warm the remuxed file for a video and return a (unused) URL. Kept for the
      * /songs/stream-url endpoint so the client can pre-warm playback on the next
      * track while the current one is still playing.

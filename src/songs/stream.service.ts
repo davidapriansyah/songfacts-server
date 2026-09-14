@@ -10,7 +10,7 @@ import { Response } from 'express';
 const execFileAsync = promisify(execFile);
 
 const VIDEO_ID_REGEX = /^[A-Za-z0-9_-]{5,64}$/;
-const CACHE_TTL_MS = 30 * 60 * 1000;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_REDIRECTS = 5;
 const TMP_DIR = '/tmp/songfacts-files';
 const YTDLP_TIMEOUT_MS = 120000;
@@ -422,6 +422,22 @@ export class StreamService {
       });
       req.on('error', reject);
     });
+  }
+
+  /**
+   * Resolve a direct URL for native mobile players (AVPlayer/ExoPlayer), which
+   * can decode YouTube DASH fMP4 that Chrome's <audio> rejects. Returns '' if
+   * resolution fails so the mobile client can fall back to the remuxed proxy.
+   */
+  async resolveMobileUrl(videoId: string): Promise<string> {
+    try {
+      return await this.resolveDirectUrl(videoId);
+    } catch (error: any) {
+      this.logger.warn(
+        `[MOBILE] direct resolve failed for ${videoId}, falling back to remux proxy: ${String(error?.message || error).slice(0, 200)}`,
+      );
+      return '';
+    }
   }
 
   /**

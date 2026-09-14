@@ -32,6 +32,10 @@ let SongsController = class SongsController {
         const url = await this.streamService.resolveStreamUrl(String(videoId || ''));
         return { url };
     }
+    async getMobileStreamUrl(videoId) {
+        const url = await this.streamService.resolveMobileUrl(String(videoId || ''));
+        return { url };
+    }
     async findAll(page, limit) {
         return this.songsService.findAll(page || 1, limit || 20);
     }
@@ -108,6 +112,18 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], SongsController.prototype, "getStreamUrl", null);
+__decorate([
+    (0, common_1.Get)('mobile-stream'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Resolve direct streaming URL for native mobile players (DASH-capable, cached 24h)',
+    }),
+    __param(0, (0, common_1.Query)('videoId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], SongsController.prototype, "getMobileStreamUrl", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

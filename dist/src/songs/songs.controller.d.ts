@@ -9,6 +9,9 @@ export declare class SongsController {
     getStreamUrl(videoId: string): Promise<{
         url: string;
     }>;
+    getMobileStreamUrl(videoId: string): Promise<{
+        url: string;
+    }>;
     findAll(page?: number, limit?: number): Promise<{
         data: {
             id: number;

@@ -41,6 +41,17 @@ export class SongsController {
     return { url };
   }
 
+  @Get('mobile-stream')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Resolve direct streaming URL for native mobile players (DASH-capable, cached 24h)',
+  })
+  async getMobileStreamUrl(@Query('videoId') videoId: string) {
+    const url = await this.streamService.resolveMobileUrl(String(videoId || ''));
+    return { url };
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
