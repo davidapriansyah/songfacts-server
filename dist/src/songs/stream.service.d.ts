@@ -11,6 +11,16 @@ export declare class StreamService {
     private readonly fileInflight;
     private cookiesPath;
     private ensureCookies;
+    private realDebridToken;
+    /**
+     * Resolve a direct audio URL through Real-Debrid. Works even when the server
+     * runs on a datacenter IP that YouTube blocks for yt-dlp.
+     */
+    private resolveViaRealDebrid;
+    /** Stream a remote URL into a local file (used to fetch Real-Debrid links). */
+    private downloadFromUrl;
+    /** Try to fetch a video's audio via Real-Debrid. Returns false if it fails. */
+    private downloadViaRealDebrid;
     private ensureFfmpeg;
     /**
      * Download the best audio for a video with yt-dlp and remux it into a
