@@ -91,8 +91,9 @@ let StreamService = StreamService_1 = class StreamService {
         }
         catch (error) {
             const status = error?.response?.status;
-            const detail = String(error?.response?.data?.message || error?.message || error).slice(0, 200);
-            this.logger.warn(`[RD] resolve failed for ${videoId} (${status || 'no-status'}): ${detail}`);
+            const body = error?.response?.data;
+            const detail = String((body && (body.message || body.error)) || error?.message || error).slice(0, 300);
+            this.logger.warn(`[RD] resolve failed for ${videoId} (${status || 'no-status'}): ${detail}${body && (body.message || body.error) ? ` BODY=${JSON.stringify(body).slice(0, 200)}` : ''}`);
         }
         return null;
     }

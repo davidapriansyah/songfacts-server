@@ -93,10 +93,13 @@ export class StreamService {
       this.logger.warn(`[RD] unexpected response for ${videoId}`);
     } catch (error: any) {
       const status = error?.response?.status;
+      const body = error?.response?.data;
       const detail = String(
-        error?.response?.data?.message || error?.message || error,
-      ).slice(0, 200);
-      this.logger.warn(`[RD] resolve failed for ${videoId} (${status || 'no-status'}): ${detail}`);
+        (body && (body.message || body.error)) || error?.message || error,
+      ).slice(0, 300);
+      this.logger.warn(
+        `[RD] resolve failed for ${videoId} (${status || 'no-status'}): ${detail}${body && (body.message || body.error) ? ` BODY=${JSON.stringify(body).slice(0, 200)}` : ''}`,
+      );
     }
     return null;
   }
