@@ -15,7 +15,6 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const https = require("https");
-const axios_1 = require("axios");
 const execFileAsync = (0, util_1.promisify)(child_process_1.execFile);
 const VIDEO_ID_REGEX = /^[A-Za-z0-9_-]{5,64}$/;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -60,80 +59,6 @@ let StreamService = StreamService_1 = class StreamService {
         catch (error) {
             this.logger.error(`Failed to load YouTube cookies: ${error?.message}`);
             return null;
-        }
-    }
-    realDebridToken() {
-        const t = process.env.REAL_DEBRID_TOKEN;
-        return t && t.trim() ? t.trim() : null;
-    }
-    /**
-     * Resolve a direct audio URL through Real-Debrid. Works even when the server
-     * runs on a datacenter IP that YouTube blocks for yt-dlp.
-     */
-    async resolveViaRealDebrid(videoId) {
-        const token = this.realDebridToken();
-        if (!token)
-            return null;
-        try {
-            const { data } = await axios_1.default.post('https://api.real-debrid.com/rest/1.0/unrestrict/link', `link=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                timeout: 20000,
-            });
-            const url = data?.download;
-            if (typeof url === 'string' && /^https?:\/\//.test(url)) {
-                this.logger.log(`[RD] resolved ${videoId} -> ${url.replace(/[?#].*$/, '')}...`);
-                return url;
-            }
-            this.logger.warn(`[RD] unexpected response for ${videoId}`);
-        }
-        catch (error) {
-            const status = error?.response?.status;
-            const body = error?.response?.data;
-            const detail = String((body && (body.message || body.error)) || error?.message || error).slice(0, 300);
-            this.logger.warn(`[RD] resolve failed for ${videoId} (${status || 'no-status'}): ${detail}${body && (body.message || body.error) ? ` BODY=${JSON.stringify(body).slice(0, 200)}` : ''}`);
-        }
-        return null;
-    }
-    /** Stream a remote URL into a local file (used to fetch Real-Debrid links). */
-    async downloadFromUrl(url, destPath) {
-        const upstream = await this.fetchWithRedirects(url, { 'User-Agent': UA });
-        if (upstream.statusCode && upstream.statusCode >= 400) {
-            upstream.resume();
-            throw new Error(`RD download failed with HTTP ${upstream.statusCode}`);
-        }
-        const out = fs.createWriteStream(destPath, { flags: 'w' });
-        await new Promise((resolve, reject) => {
-            const fail = (err) => {
-                out.destroy();
-                reject(err);
-            };
-            upstream.on('error', fail);
-            out.on('error', fail);
-            out.on('finish', () => resolve());
-            upstream.pipe(out);
-        });
-    }
-    /** Try to fetch a video's audio via Real-Debrid. Returns false if it fails. */
-    async downloadViaRealDebrid(videoId, src) {
-        const url = await this.resolveViaRealDebrid(videoId);
-        if (!url)
-            return false;
-        try {
-            await this.downloadFromUrl(url, src);
-            return true;
-        }
-        catch (error) {
-            this.logger.warn(`[RD] download failed for ${videoId}: ${String(error?.message || error).slice(0, 200)}`);
-            if (fs.existsSync(src)) {
-                try {
-                    fs.unlinkSync(src);
-                }
-                catch { }
-            }
-            return false;
         }
     }
     async ensureFfmpeg() {
@@ -183,50 +108,45 @@ let StreamService = StreamService_1 = class StreamService {
             if (fs.existsSync(f))
                 fs.unlinkSync(f);
         }
-        // Prefer Real-Debrid for the download (works from datacenter IPs where
-        // YouTube blocks yt-dlp), then fall back to yt-dlp clients.
-        const rdOk = await this.downloadViaRealDebrid(videoId, src);
-        if (!rdOk) {
-            const download = async (extraArgs) => {
-                await execFileAsync('yt-dlp', [
-                    `https://www.youtube.com/watch?v=${videoId}`,
-                    '-f',
-                    '140/bestaudio[ext=m4a]/bestaudio',
-                    '-o',
-                    src,
-                    '--no-playlist',
-                    '--no-warnings',
-                    '--no-cache-dir',
-                    '--no-progress',
-                    '-4',
-                    ...extraArgs,
-                ], { timeout: YTDLP_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 });
-            };
-            // web_embedded is the client whose data downloads actually succeed with
-            // anonymous yt-dlp (default/tv/android now 403 at the download stage).
-            const clientAttempts = [
-                { label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] },
-                { label: 'default', args: [] },
-                { label: 'android', args: ['--extractor-args', 'youtube:player_client=android'] },
-            ];
-            let lastError = null;
-            for (const attempt of clientAttempts) {
-                try {
-                    await download(attempt.args);
-                    lastError = null;
-                    break;
-                }
-                catch (error) {
-                    lastError = error;
-                    this.logger.warn(`yt-dlp download (${attempt.label}) failed for ${videoId}: ${String(error?.stderr || error?.message || error).slice(0, 200)}`);
-                }
+        const download = async (extraArgs) => {
+            await execFileAsync('yt-dlp', [
+                `https://www.youtube.com/watch?v=${videoId}`,
+                '-f',
+                '140/bestaudio[ext=m4a]/bestaudio',
+                '-o',
+                src,
+                '--no-playlist',
+                '--no-warnings',
+                '--no-cache-dir',
+                '--no-progress',
+                '-4',
+                ...extraArgs,
+            ], { timeout: YTDLP_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 });
+        };
+        // web_embedded is the client whose data downloads actually succeed with
+        // anonymous yt-dlp (default/tv/android now 403 at the download stage).
+        const clientAttempts = [
+            { label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] },
+            { label: 'default', args: [] },
+            { label: 'android', args: ['--extractor-args', 'youtube:player_client=android'] },
+        ];
+        let lastError = null;
+        for (const attempt of clientAttempts) {
+            try {
+                await download(attempt.args);
+                lastError = null;
+                break;
             }
-            if (lastError) {
-                throw new Error(`yt-dlp download failed (all clients): ${String(lastError?.stderr || lastError?.message || lastError).slice(0, 200)}`);
+            catch (error) {
+                lastError = error;
+                this.logger.warn(`yt-dlp download (${attempt.label}) failed for ${videoId}: ${String(error?.stderr || error?.message || error).slice(0, 200)}`);
             }
         }
+        if (lastError) {
+            throw new Error(`yt-dlp download failed (all clients): ${String(lastError?.stderr || lastError?.message || lastError).slice(0, 200)}`);
+        }
         if (!fs.existsSync(src)) {
-            throw new Error('audio download produced no file');
+            throw new Error('yt-dlp download produced no file');
         }
         let formatName = '';
         try {
@@ -350,12 +270,6 @@ let StreamService = StreamService_1 = class StreamService {
         const cached = this.cache.get(videoId);
         if (cached && cached.expiresAt > Date.now()) {
             return cached.url;
-        }
-        // Real-Debrid first: bypasses the YouTube datacenter IP block.
-        const rdUrl = await this.resolveViaRealDebrid(videoId);
-        if (rdUrl) {
-            this.cache.set(videoId, { url: rdUrl, expiresAt: Date.now() + CACHE_TTL_MS });
-            return rdUrl;
         }
         const cookiesPath = this.ensureCookies();
         const attempts = [];
