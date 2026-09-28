@@ -36,6 +36,11 @@ let SongsController = class SongsController {
         const url = await this.streamService.resolveMobileUrl(String(videoId || ''));
         return { url };
     }
+    async relay(url, range, res) {
+        if (!res)
+            throw new common_1.BadRequestException('No response');
+        return this.streamService.relayStream(String(url || ''), range, res);
+    }
     async findAll(page, limit) {
         return this.songsService.findAll(page || 1, limit || 20);
     }
@@ -124,6 +129,20 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], SongsController.prototype, "getMobileStreamUrl", null);
+__decorate([
+    (0, common_1.Get)('relay'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Range-aware passthrough for an already-resolved googlevideo URL (googlevideo.com only)',
+    }),
+    __param(0, (0, common_1.Query)('url')),
+    __param(1, (0, common_1.Headers)('range')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], SongsController.prototype, "relay", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

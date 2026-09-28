@@ -52,6 +52,21 @@ export class SongsController {
     return { url };
   }
 
+  @Get('relay')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Range-aware passthrough for an already-resolved googlevideo URL (googlevideo.com only)',
+  })
+  async relay(
+    @Query('url') url: string,
+    @Headers('range') range?: string,
+    @Res() res?: Response,
+  ) {
+    if (!res) throw new BadRequestException('No response');
+    return this.streamService.relayStream(String(url || ''), range, res);
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

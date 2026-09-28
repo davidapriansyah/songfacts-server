@@ -12,6 +12,7 @@ export declare class SongsController {
     getMobileStreamUrl(videoId: string): Promise<{
         url: string;
     }>;
+    relay(url: string, range?: string, res?: Response): Promise<void>;
     findAll(page?: number, limit?: number): Promise<{
         data: {
             id: number;

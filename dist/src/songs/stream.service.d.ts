@@ -32,6 +32,15 @@ export declare class StreamService {
      */
     resolveMobileUrl(videoId: string): Promise<string>;
     /**
+     * Pass-through proxy for already-resolved googlevideo URLs. ExoPlayer/AVPlayer
+     * require a Range-capable 206 endpoint; googlevideo returns 403 without a
+     * Range header (e.g. on the player's first probe request), so the client
+     * streams through this relay instead of the raw URL.
+     *
+     * Restricted to googlevideo.com hosts only to avoid SSRF.
+     */
+    relayStream(url: string, range: string | undefined, res: Response): Promise<void>;
+    /**
      * Warm the remuxed file for a video and return a (unused) URL. Kept for the
      * /songs/stream-url endpoint so the client can pre-warm playback on the next
      * track while the current one is still playing.

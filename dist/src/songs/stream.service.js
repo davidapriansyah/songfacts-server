@@ -35,6 +35,23 @@ const CLIENT_WHITELIST = [
     'default',
 ];
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+// googlevideo returns 403 for any single Range request larger than this
+// (verified: bytes=0-1048576 works, bytes=0-1572864 is rejected).
+const MAX_UPSTREAM_RANGE_SPAN = 1048576;
+/**
+ * Rewrite a client Range header into one googlevideo accepts: always an
+ * explicit end, and spanning at most ~1MB. Players (ExoPlayer/AVPlayer)
+ * stream media in small range chunks anyway, so this is transparent to them.
+ */
+function capRange(range) {
+    const m = /^bytes\s*=\s*(\d*)\s*-\s*(\d*)$/i.exec((range || '').trim());
+    if (!m)
+        return `bytes=0-${MAX_UPSTREAM_RANGE_SPAN - 1}`;
+    const start = m[1] === '' ? 0 : Number(m[1]);
+    const end = m[2] === '' ? undefined : Number(m[2]);
+    const cappedEnd = end === undefined ? start + MAX_UPSTREAM_RANGE_SPAN - 1 : Math.min(end, start + MAX_UPSTREAM_RANGE_SPAN - 1);
+    return `bytes=${start}-${cappedEnd}`;
+}
 let StreamService = StreamService_1 = class StreamService {
     constructor() {
         this.logger = new common_1.Logger(StreamService_1.name);
@@ -377,6 +394,68 @@ let StreamService = StreamService_1 = class StreamService {
         catch (error) {
             this.logger.warn(`[MOBILE] direct resolve failed for ${videoId}, falling back to remux proxy: ${String(error?.message || error).slice(0, 200)}`);
             return '';
+        }
+    }
+    /**
+     * Pass-through proxy for already-resolved googlevideo URLs. ExoPlayer/AVPlayer
+     * require a Range-capable 206 endpoint; googlevideo returns 403 without a
+     * Range header (e.g. on the player's first probe request), so the client
+     * streams through this relay instead of the raw URL.
+     *
+     * Restricted to googlevideo.com hosts only to avoid SSRF.
+     */
+    async relayStream(url, range, res) {
+        if (!url)
+            throw new common_1.BadRequestException('Missing url');
+        let host;
+        try {
+            host = new URL(url).hostname;
+        }
+        catch {
+            throw new common_1.BadRequestException('Invalid url');
+        }
+        if (!host.endsWith('googlevideo.com')) {
+            throw new common_1.BadRequestException('Relay only allows googlevideo.com targets');
+        }
+        try {
+            // ExoPlayer/AVPlayer often probe with NO Range header first, and
+            // googlevideo returns 403 both without a Range and for open-ended /
+            // oversized ranges. Always push an explicit, <=1MB Range upstream so we
+            // get a 206 the player can start and continue streaming from.
+            const upstreamRange = capRange(range);
+            const headers = {
+                'User-Agent': UA,
+                'Referer': 'https://www.youtube.com/',
+                Range: upstreamRange,
+            };
+            const upstream = await this.fetchWithRedirects(url, headers);
+            const code = upstream.statusCode || 200;
+            this.logger.log(`[relay] host=${host} upstream=${code} range=${upstreamRange}`);
+            if (code >= 400) {
+                upstream.resume();
+                if (!res.headersSent)
+                    res.status(code).end();
+                return;
+            }
+            if (!res.headersSent) {
+                res.status(code);
+                for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
+                    const v = upstream.headers[h];
+                    if (v)
+                        res.setHeader(h, v);
+                }
+            }
+            upstream.pipe(res);
+            res.on('close', () => upstream.destroy());
+        }
+        catch (error) {
+            this.logger.error(`relay failed: ${String(error?.message || error).slice(0, 200)}`);
+            if (!res.headersSent) {
+                res.status(502).end('relay failed');
+            }
+            else {
+                res.end();
+            }
         }
     }
     /**
