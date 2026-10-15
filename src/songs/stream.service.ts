@@ -147,9 +147,10 @@ export class StreamService {
       );
     };
 
-    // web_embedded is the client whose data downloads actually succeed with
-    // anonymous yt-dlp (default/tv/android now 403 at the download stage).
+    // The web client's progressive (combined AV) format downloads fully without
+    // a PO token; audio-only DASH URLs are throttled to ~1MiB otherwise.
     const clientAttempts: { label: string; args: string[] }[] = [
+      { label: 'web', args: ['--extractor-args', 'youtube:player_client=web', '-f', '18'] },
       { label: 'web_embedded', args: ['--extractor-args', 'youtube:player_client=web_embedded'] },
       { label: 'default', args: [] },
       { label: 'android', args: ['--extractor-args', 'youtube:player_client=android'] },
